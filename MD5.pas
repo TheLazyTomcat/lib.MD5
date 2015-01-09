@@ -105,8 +105,12 @@ var
   {$ELSE}
   {$IFDEF FPC}{$ASMMODE intel}{$ENDIF}
   asm
-    mov CL, DL
-    rol EAX, CL
+  {$IFDEF FPC}
+    MOV EAX, EDX
+  {$ELSE}
+    MOV CL,  DL
+  {$ENDIF}
+    ROL EAX, CL
   end;
   {$ENDIF}
 
@@ -143,8 +147,8 @@ begin
 Result := '00000000000000000000000000000000';
 For i := Low(HashArray) to High(HashArray) do
   begin
-    Result[(i * 2) + 1] := IntToHex(HashArray[i] and $0F,1)[1];
-    Result[(i * 2) + 2] := IntToHex(HashArray[i] shr 4,1)[1];
+    Result[(i * 2) + 2] := IntToHex(HashArray[i] and $0F,1)[1];
+    Result[(i * 2) + 1] := IntToHex(HashArray[i] shr 4,1)[1];
   end;
 end;
 
@@ -173,27 +177,6 @@ Result := (Hash1.PartA = Hash2.PartA) and
           (Hash1.PartC = Hash2.PartC) and
           (Hash1.PartD = Hash2.PartD);
 end;
-
-//==============================================================================
-
-
-Function StringMD5(const Text: String): TMD5Hash;
-{$IFDEF UseStringStream}
-var
-  StringStream: TStringStream;
-begin
-StringStream := TStringStream.Create(Text);
-try
-  Result := StreamMD5(StringStream);
-finally
-  StringStream.Free;
-end;
-end;
-{$ELSE}
-begin
-Result := LastBufferMD5(InitialMD5,PChar(Text)^,Length(Text) * SizeOf(Char));
-end;
-{$ENDIF}
 
 //==============================================================================
 
@@ -228,14 +211,35 @@ HelpBuffer := AllocMem(Chunks * cChunkSize);
 try
   CopyMemory(HelpBuffer,@Buffer,BuffSize);
   PByteArray(HelpBuffer)^[BuffSize] := cFAB;
-  PInt64(@PByteArray(HelpBuffer)[(Chunks * cChunkSize) - SizeOf(Int64)])^ := Size * 8;
+  PInt64(Addr(PByteArray(HelpBuffer)^[(Chunks * cChunkSize) - SizeOf(Int64)]))^ := Size * 8;
   Result := BufferMD5(Hash,HelpBuffer^,Chunks * cChunkSize);
 finally
   FreeMem(HelpBuffer,Chunks * cChunkSize);
 end;
 end;
 
-//------------------------------------------------------------------------------
+//==============================================================================
+
+
+Function StringMD5(const Text: String): TMD5Hash;
+{$IFDEF UseStringStream}
+var
+  StringStream: TStringStream;
+begin
+StringStream := TStringStream.Create(Text);
+try
+  Result := StreamMD5(StringStream);
+finally
+  StringStream.Free;
+end;
+end;
+{$ELSE}
+begin
+Result := LastBufferMD5(InitialMD5,PChar(Text)^,Length(Text) * SizeOf(Char));
+end;
+{$ENDIF}
+
+//==============================================================================
 
 Function StreamMD5(InputStream: TStream): TMD5Hash;
 var
