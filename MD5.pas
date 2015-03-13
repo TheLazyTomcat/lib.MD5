@@ -9,9 +9,9 @@
 
 MD5 Hash Calculation
 
-©František Milt 2015-01-09
+©František Milt 2015-03-13
 
-Version 1.2.2
+Version 1.3
 
 ===============================================================================}
 unit MD5;
@@ -25,6 +25,12 @@ uses
   Classes;
 
 type
+{$IFDEF x64}
+  TSize = UInt64;
+{$ELSE}
+  TSize = LongWord;
+{$ENDIF}
+
   TMD5Hash = Record
     PartA:  LongWord;
     PartB:  LongWord;
@@ -48,8 +54,8 @@ Function TryStrToMD5(HashString: String; out Hash: TMD5Hash): Boolean;
 Function StrToMD5Def(HashString: String; Default: TMD5Hash): TMD5Hash;
 Function SameMD5(Hash1, Hash2: TMD5Hash): Boolean;
 
-Function BufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: Integer): TMD5Hash;
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: Integer; Size: Int64 = -1): TMD5Hash;
+Function BufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: TSize): TMD5Hash;
+Function LastBufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: TSize; MessageSize: Int64 = -1): TMD5Hash;
 
 Function AnsiStringMD5(const Text: AnsiString): TMD5Hash;
 Function WideStringMD5(const Text: WideString): TMD5Hash;
@@ -57,6 +63,17 @@ Function StringMD5(const Text: String): TMD5Hash;
 
 Function StreamMD5(InputStream: TStream): TMD5Hash;
 Function FileMD5(const FileName: String): TMD5Hash;
+
+//------------------------------------------------------------------------------
+
+type
+  TMD5Context = type Pointer;
+
+Function MD5_Init: TMD5Context;
+procedure MD5_Update(Context: TMD5Context; const Buffer; Size: TSize);
+Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TSize): TMD5Hash; overload;
+Function MD5_Final(var Context: TMD5Context): TMD5Hash; overload;
+Function MD5_Hash(const Buffer; Size: TSize): TMD5Hash;
 
 implementation
 
@@ -97,6 +114,14 @@ const
 type
   TChunkBuffer = Array[0..ChunkSize - 1] of Byte;
   PChunkBuffer = ^TChunkBuffer;
+
+  TMD5Context_Internal = record
+    MessageHash:    TMD5Hash;
+    MessageSize:    Int64;
+    TransferSize:   LongWord;
+    TransferBuffer: TChunkBuffer;    
+  end;
+  PMD5Context_Internal = ^TMD5Context_Internal;
 
 //==============================================================================
 
@@ -210,7 +235,7 @@ end;
 
 //==============================================================================
 
-Function BufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: Integer): TMD5Hash;
+Function BufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: TSize): TMD5Hash;
 var
   i:          Integer;
   ChunkPtr:   PChunkBuffer;
@@ -225,12 +250,15 @@ If (BuffSize mod ChunkSize) = 0 then
         Inc(ChunkPtr);
       end;
   end
-else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d',[ChunkSize]);
+else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
 end;
 
 //------------------------------------------------------------------------------
 
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: Integer; Size: Int64 = -1): TMD5Hash;
+Function LastBufferMD5(Hash: TMD5Hash; const Buffer; BuffSize: TSize; MessageSize: Int64 = -1): TMD5Hash;
+type
+  TInt64Array = Array[0..0] of Int64;
+  PInt64Array = ^TInt64Array;
 var
   FullChunks:     Integer;
   LastChunkSize:  Integer;
@@ -238,16 +266,16 @@ var
   HelpChunksBuff: PChunkBuffer;
 begin
 Result := Hash;
-If Size < 0 then Size := BuffSize;
+If MessageSize < 0 then MessageSize := BuffSize;
 FullChunks := BuffSize div ChunkSize;
 If FullChunks > 0 then Result := BufferMD5(Result,Buffer,FullChunks * ChunkSize);
-LastChunkSize := BuffSize - (FullChunks * ChunkSize);
+LastChunkSize := BuffSize - TSize(FullChunks * ChunkSize);
 HelpChunks := Ceil((LastChunkSize + SizeOf(Int64) + 1) / ChunkSize);
 HelpChunksBuff := AllocMem(HelpChunks * ChunkSize);
 try
   Move(TByteArray(Buffer)[FullChunks * ChunkSize],HelpChunksBuff^,LastChunkSize);
   PByteArray(HelpChunksBuff)^[LastChunkSize] := $80;
-  PInt64(Addr(PByteArray(HelpChunksBuff)^[(HelpChunks * ChunkSize) - SizeOf(Int64)]))^ := Size * 8;
+  PInt64Array(HelpChunksBuff)^[HelpChunks * (ChunkSize div SizeOf(Int64)) - 1] := MessageSize * 8;
   Result := BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
 finally
   FreeMem(HelpChunksBuff,HelpChunks * ChunkSize);
@@ -326,7 +354,6 @@ If Assigned(InputStream) then
     GetMem(Buffer,BufferSize);
     try
       Result := InitialMD5;
-      InputStream.Position := 0;
       repeat
         BytesRead := InputStream.Read(Buffer^,BufferSize);
         If BytesRead < BufferSize then
@@ -353,6 +380,85 @@ try
 finally
   FileStream.Free;
 end;
+end;
+
+//==============================================================================
+
+Function MD5_Init: TMD5Context;
+begin
+Result := AllocMem(SizeOf(TMD5Context_Internal));
+with PMD5Context_Internal(Result)^ do
+  begin
+    MessageHash := InitialMD5;
+    MessageSize := 0;
+    TransferSize := 0;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+
+procedure MD5_Update(Context: TMD5Context; const Buffer; Size: TSize);
+var
+  FullChunks:     Integer;
+  RemainingSize:  TSize;
+begin
+with PMD5Context_Internal(Context)^ do
+  begin
+    If TransferSize > 0 then
+      begin
+        If Size >= (ChunkSize - TransferSize) then
+          begin
+            Inc(MessageSize,ChunkSize - TransferSize);
+            Move(Buffer,TransferBuffer[TransferSize],ChunkSize - TransferSize);
+            MessageHash := BufferMD5(MessageHash,TransferBuffer,ChunkSize);
+            RemainingSize := Size - (ChunkSize - TransferSize);
+            TransferSize := 0;
+            MD5_Update(Context,PByteArray(@Buffer)^[Size - RemainingSize],RemainingSize);
+          end
+        else
+          begin
+            Inc(MessageSize,Size);
+            Move(Buffer,TransferBuffer[TransferSize],Size);
+            Inc(TransferSize,Size);
+          end;  
+      end
+    else
+      begin
+        Inc(MessageSize,Size);
+        FullChunks := Size div ChunkSize;
+        MessageHash := BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
+        If TSize(FullChunks * ChunkSize) < Size then
+          begin
+            TransferSize := Size - TSize(FullChunks * ChunkSize);
+            Move(PByteArray(@Buffer)^[Size - TransferSize],TransferBuffer,TransferSize);
+          end;
+      end;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TSize): TMD5Hash;
+begin
+MD5_Update(Context,Buffer,Size);
+Result := MD5_Final(Context);
+end;
+
+//------------------------------------------------------------------------------
+
+Function MD5_Final(var Context: TMD5Context): TMD5Hash;
+begin
+with PMD5Context_Internal(Context)^ do
+  Result := LastBufferMD5(MessageHash,TransferBuffer,TransferSize,MessageSize);
+FreeMem(Context,SizeOf(TMD5Context_Internal));
+Context := nil;
+end;
+
+//------------------------------------------------------------------------------
+
+Function MD5_Hash(const Buffer; Size: TSize): TMD5Hash;
+begin
+Result := LastBufferMD5(InitialMD5,Buffer,Size);
 end;
 
 end.
