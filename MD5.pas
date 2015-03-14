@@ -48,7 +48,7 @@ const
     
   ZeroMD5: TMD5Hash = (PartA: 0; PartB: 0; PartC: 0; PartD: 0);
 
-Function MD5toStr(const Hash: TMD5Hash): String;
+Function MD5toStr(Hash: TMD5Hash): String;
 Function StrToMD5(Str: String): TMD5Hash;
 Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
 Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
@@ -154,7 +154,7 @@ begin
 Result := Hash;
 For i := 0 to 63 do
   begin
-    Case i of
+    case i of
        0..15: FuncResult := (Hash.PartB and Hash.PartC) or ((not Hash.PartB) and Hash.PartD);
       16..31: FuncResult := (Hash.PartD and Hash.PartB) or (Hash.PartC and (not Hash.PartD));
       32..47: FuncResult := Hash.PartB xor Hash.PartC xor Hash.PartD;
@@ -175,7 +175,7 @@ end;
 
 //==============================================================================
 
-Function MD5toStr(const Hash: TMD5Hash): String;
+Function MD5toStr(Hash: TMD5Hash): String;
 var
   HashArray:  Array[0..15] of Byte absolute Hash;
   i:          Integer;
