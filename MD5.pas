@@ -7,11 +7,11 @@
 -------------------------------------------------------------------------------}
 {===============================================================================
 
-MD5 Hash Calculation
+  MD5 Hash Calculation
 
-©František Milt 2015-03-14
+  ©František Milt 2015-03-15
 
-Version 1.3.1
+  Version 1.3.2
 
 ===============================================================================}
 unit MD5;
@@ -54,7 +54,7 @@ Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
 Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
 Function SameMD5(A,B: TMD5Hash): Boolean;
 
-Function BufferMD5(Hash: TMD5Hash; const Buffer; Size: TSize): TMD5Hash; overload;
+procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TSize); overload;
 Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TSize; MessageSize: Int64 = -1): TMD5Hash;
 
 Function BufferMD5(const Buffer; Size: TSize): TMD5Hash; overload;
@@ -234,7 +234,7 @@ end;
 
 //==============================================================================
 
-Function BufferMD5(Hash: TMD5Hash; const Buffer; Size: TSize): TMD5Hash;
+procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TSize);
 type
   TChunksArray = Array[0..0] of TChunkBuffer;
 var
@@ -242,9 +242,8 @@ var
 begin
 If (Size mod ChunkSize) = 0 then
   begin
-    Result := Hash;
     For i := 0 to Pred(Size div ChunkSize) do
-      Result := ChunkHash(Result,TChunksArray(Buffer)[i]);
+      Hash := ChunkHash(Hash,TChunksArray(Buffer)[i]);
   end
 else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
 end;
@@ -263,7 +262,7 @@ begin
 Result := Hash;
 If MessageSize < 0 then MessageSize := Size;
 FullChunks := Size div ChunkSize;
-If FullChunks > 0 then Result := BufferMD5(Result,Buffer,FullChunks * ChunkSize);
+If FullChunks > 0 then BufferMD5(Result,Buffer,FullChunks * ChunkSize);
 LastChunkSize := Size - TSize(FullChunks * ChunkSize);
 HelpChunks := Ceil((LastChunkSize + SizeOf(Int64) + 1) / ChunkSize);
 HelpChunksBuff := AllocMem(HelpChunks * ChunkSize);
@@ -271,7 +270,7 @@ try
   Move(TByteArray(Buffer)[FullChunks * ChunkSize],HelpChunksBuff^,LastChunkSize);
   TByteArray(HelpChunksBuff^)[LastChunkSize] := $80;
   TInt64Array(HelpChunksBuff^)[HelpChunks * (ChunkSize div SizeOf(Int64)) - 1] := MessageSize * 8;
-  Result := BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
+  BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
 finally
   FreeMem(HelpChunksBuff,HelpChunks * ChunkSize);
 end;
@@ -370,7 +369,7 @@ If Assigned(Stream) then
         If BytesRead < BufferSize then
           Result := LastBufferMD5(Result,Buffer^,BytesRead,MessageSize)
         else
-          Result := BufferMD5(Result,Buffer^,BytesRead);
+          BufferMD5(Result,Buffer^,BytesRead);
         Dec(Count,BytesRead);
       until BytesRead < BufferSize;
     finally
@@ -422,10 +421,10 @@ with PMD5Context_Internal(Context)^ do
           begin
             Inc(MessageSize,ChunkSize - TransferSize);
             Move(Buffer,TransferBuffer[TransferSize],ChunkSize - TransferSize);
-            MessageHash := BufferMD5(MessageHash,TransferBuffer,ChunkSize);
+            BufferMD5(MessageHash,TransferBuffer,ChunkSize);
             RemainingSize := Size - (ChunkSize - TransferSize);
             TransferSize := 0;
-            MD5_Update(Context,PByteArray(@Buffer)^[Size - RemainingSize],RemainingSize);
+            MD5_Update(Context,TByteArray(Buffer)[Size - RemainingSize],RemainingSize);
           end
         else
           begin
@@ -438,11 +437,11 @@ with PMD5Context_Internal(Context)^ do
       begin
         Inc(MessageSize,Size);
         FullChunks := Size div ChunkSize;
-        MessageHash := BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
+        BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
         If TSize(FullChunks * ChunkSize) < Size then
           begin
             TransferSize := Size - TSize(FullChunks * ChunkSize);
-            Move(PByteArray(@Buffer)^[Size - TransferSize],TransferBuffer,TransferSize);
+            Move(TByteArray(Buffer)[Size - TransferSize],TransferBuffer,TransferSize);
           end;
       end;
   end;
