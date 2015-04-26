@@ -9,9 +9,9 @@
 
   MD5 Hash Calculation
 
-  ©František Milt 2015-03-18
+  ©František Milt 2015-04-27
 
-  Version 1.5
+  Version 1.5.1
 
 ===============================================================================}
 unit MD5;
@@ -30,12 +30,15 @@ type
 {$ELSE}
   QuadWord = Int64;
 {$ENDIF}
+  PQuadWord = ^QuadWord;
 
 {$IFDEF x64}
-  TSize = UInt64;
+  PtrUInt = UInt64;
 {$ELSE}
-  TSize = LongWord;
+  PtrUInt = LongWord;
 {$ENDIF}
+
+  TSize = PtrUInt;
 
   TMD5Hash = Record
     PartA:  LongWord;
@@ -122,6 +125,7 @@ const
 
 type
   TChunkBuffer = Array[0..ChunkSize - 1] of Byte;
+  PChunkBuffer = ^TChunkBuffer;
 
   TMD5Context_Internal = record
     MessageHash:    TMD5Hash;
@@ -242,17 +246,20 @@ end;
 //==============================================================================
 
 procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TSize);
-type
-  TChunksArray = Array[0..0] of TChunkBuffer;
 var
-  i:  TSize;
+  i:    TSize;
+  Buff: PChunkBuffer;
 begin
 If Size > 0 then
   begin
     If (Size mod ChunkSize) = 0 then
       begin
+        Buff := @Buffer;
         For i := 0 to Pred(Size div ChunkSize) do
-          Hash := ChunkHash(Hash,TChunksArray(Buffer)[i]);
+          begin
+            Hash := ChunkHash(Hash,Buff^);
+            Inc(Buff);
+          end;
       end
     else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
   end;
@@ -261,24 +268,22 @@ end;
 //------------------------------------------------------------------------------
 
 Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TSize; MessageLength: QuadWord): TMD5Hash;
-type
-  TQuadWords = Array[0..0] of QuadWord;
 var
-  FullChunks:     Integer;
-  LastChunkSize:  Integer;
-  HelpChunks:     Integer;
+  FullChunks:     TSize;
+  LastChunkSize:  TSize;
+  HelpChunks:     TSize;
   HelpChunksBuff: Pointer;
 begin
 Result := Hash;
 FullChunks := Size div ChunkSize;
 If FullChunks > 0 then BufferMD5(Result,Buffer,FullChunks * ChunkSize);
-LastChunkSize := Size - TSize(FullChunks * ChunkSize);
+LastChunkSize := {%H-}Size - TSize(FullChunks * ChunkSize);
 HelpChunks := Ceil((LastChunkSize + SizeOf(QuadWord) + 1) / ChunkSize);
 HelpChunksBuff := AllocMem(HelpChunks * ChunkSize);
 try
-  Move(TByteArray(Buffer)[FullChunks * ChunkSize],HelpChunksBuff^,LastChunkSize);
-  TByteArray(HelpChunksBuff^)[LastChunkSize] := $80;
-  TQuadWords(HelpChunksBuff^)[HelpChunks * (ChunkSize div SizeOf(QuadWord)) - 1] := MessageLength;
+  Move({%H-}Pointer(PtrUInt(@Buffer) + (FullChunks * ChunkSize))^,HelpChunksBuff^,LastChunkSize);
+  {%H-}PByte(PtrUInt(HelpChunksBuff) + LastChunkSize)^ := $80;
+  {%H-}PQuadWord(PtrUInt(HelpChunksBuff) + (HelpChunks * ChunkSize) - SizeOf(QuadWord))^ := MessageLength;
   BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
 finally
   FreeMem(HelpChunksBuff,HelpChunks * ChunkSize);
@@ -426,7 +431,7 @@ end;
 
 procedure MD5_Update(Context: TMD5Context; const Buffer; Size: TSize);
 var
-  FullChunks:     Integer;
+  FullChunks:     TSize;
   RemainingSize:  TSize;
 begin
 with PMD5Context_Internal(Context)^ do
@@ -440,7 +445,7 @@ with PMD5Context_Internal(Context)^ do
             BufferMD5(MessageHash,TransferBuffer,ChunkSize);
             RemainingSize := Size - (ChunkSize - TransferSize);
             TransferSize := 0;
-            MD5_Update(Context,TByteArray(Buffer)[Size - RemainingSize],RemainingSize);
+            MD5_Update(Context,{%H-}Pointer(PtrUInt(@Buffer) + Size - RemainingSize)^,RemainingSize);
           end
         else
           begin
@@ -456,7 +461,7 @@ with PMD5Context_Internal(Context)^ do
         BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
         If TSize(FullChunks * ChunkSize) < Size then
           begin
-            TransferSize := Size - TSize(FullChunks * ChunkSize);
+            TransferSize := {%H-}Size - (FullChunks * ChunkSize);
             Move(TByteArray(Buffer)[Size - TransferSize],TransferBuffer,TransferSize);
           end;
       end;
