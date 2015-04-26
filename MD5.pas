@@ -11,7 +11,7 @@
 
   ©František Milt 2015-03-18
 
-  Version 1.4
+  Version 1.5
 
 ===============================================================================}
 unit MD5;
@@ -245,14 +245,17 @@ procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TSize);
 type
   TChunksArray = Array[0..0] of TChunkBuffer;
 var
-  i:  Integer;
+  i:  TSize;
 begin
-If (Size mod ChunkSize) = 0 then
+If Size > 0 then
   begin
-    For i := 0 to Pred(Size div ChunkSize) do
-      Hash := ChunkHash(Hash,TChunksArray(Buffer)[i]);
-  end
-else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
+    If (Size mod ChunkSize) = 0 then
+      begin
+        For i := 0 to Pred(Size div ChunkSize) do
+          Hash := ChunkHash(Hash,TChunksArray(Buffer)[i]);
+      end
+    else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
+  end;
 end;
 
 //------------------------------------------------------------------------------
