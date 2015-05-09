@@ -9,9 +9,9 @@
 
   MD5 Hash Calculation
 
-  ©František Milt 2015-04-27
+  ©František Milt 2015-05-06
 
-  Version 1.5.1
+  Version 1.5.2
 
 ===============================================================================}
 unit MD5;
@@ -20,6 +20,10 @@ interface
 
 {$DEFINE LargeBuffer}
 {.$DEFINE UseStringStream}
+
+{$IFOPT Q+}
+  {$DEFINE OverflowCheck}
+{$ENDIF}
 
 uses
   Classes;
@@ -101,7 +105,7 @@ const
 {$ENDIF}
   BufferSize      = ChunksPerBuffer * ChunkSize;  // size of read buffer
 
-  ShiftCoefs: Array[0..63] of LongWord = (
+  ShiftCoefs: Array[0..63] of Byte = (
     7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,
     5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,
     4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,
@@ -117,7 +121,7 @@ const
     $F4292244,$432AFF97,$AB9423A7,$FC93A039,$655B59C3,$8F0CCC92,$FFEFF47D,$85845DD1,
     $6FA87E4F,$FE2CE6E0,$A3014314,$4E0811A1,$F7537E82,$BD3AF235,$2AD7D2BB,$EB86D391);
 
-  ModuloCoefs: Array[0..63] of LongWord = (
+  ModuloCoefs: Array[0..63] of Byte = (
     0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
     1,  6, 11,  0,  5, 10, 15,  4,  9, 14,  3,  8, 13,  2,  7, 12,
     5,  8, 11, 14,  1,  4,  7, 10, 13,  0,  3,  6,  9, 12, 15,  2,
@@ -137,19 +141,20 @@ type
 
 //==============================================================================
 
-Function LeftRotate(Number,Shift: LongWord): LongWord; register; {$IFNDEF PurePascal}assembler;{$ENDIF}
+{$IFDEF FPC}{$ASMMODE intel}{$ENDIF}
+Function LeftRotate(Value: LongWord; Shift: Byte): LongWord;{$IFNDEF PurePascal}assembler;{$ENDIF}
 {$IFDEF PurePascal}
 begin
-  Result := (Number shl Shift) or (Number shr (32 - Shift));
+Shift := Shift and $1F;
+Result := LongWord((Value shl Shift) or (Value shr (32 - Shift)));
 end;
 {$ELSE}
-{$IFDEF FPC}{$ASMMODE intel}{$ENDIF}
 asm
 {$IFDEF x64}
-  MOV   EAX,  ECX
+    MOV   EAX,  ECX
 {$ENDIF}
-  MOV   CL,   DL
-  ROL   EAX,  CL
+    MOV   CL,   DL
+    ROL   EAX,  CL
 end;
 {$ENDIF}
 
@@ -175,13 +180,17 @@ For i := 0 to 63 do
     Temp := Hash.PartD;
     Hash.PartD := Hash.PartC;
     Hash.PartC := Hash.PartB;
-    Hash.PartB := Hash.PartB + LeftRotate(Hash.PartA + FuncResult + SinusCoefs[i] + ChunkWords[ModuloCoefs[i]], ShiftCoefs[i]);
+    {$IFDEF OverflowCheck}{$Q-}{$ENDIF}
+    Hash.PartB := LongWord(Hash.PartB + LeftRotate(LongWord(Hash.PartA + FuncResult + SinusCoefs[i] + ChunkWords[ModuloCoefs[i]]), ShiftCoefs[i]));
+    {$IFDEF OverflowCheck}{$Q+}{$ENDIF}
     Hash.PartA := Temp;
   end;
-Inc(Result.PartA,Hash.PartA);
-Inc(Result.PartB,Hash.PartB);
-Inc(Result.PartC,Hash.PartC);
-Inc(Result.PartD,Hash.PartD);
+{$IFDEF OverflowCheck}{$Q-}{$ENDIF}
+Result.PartA := LongWord(Result.PartA + Hash.PartA);
+Result.PartB := LongWord(Result.PartB + Hash.PartB);
+Result.PartC := LongWord(Result.PartC + Hash.PartC);
+Result.PartD := LongWord(Result.PartD + Hash.PartD);
+{$IFDEF OverflowCheck}{$Q+}{$ENDIF}
 end;
 
 //==============================================================================
@@ -277,13 +286,21 @@ begin
 Result := Hash;
 FullChunks := Size div ChunkSize;
 If FullChunks > 0 then BufferMD5(Result,Buffer,FullChunks * ChunkSize);
-LastChunkSize := {%H-}Size - TSize(FullChunks * ChunkSize);
+{$IFDEF x64}
+LastChunkSize := Size - (FullChunks * ChunkSize);
+{$ELSE}
+LastChunkSize := Size - (Int64(FullChunks) * ChunkSize);
+{$ENDIF}
 HelpChunks := Ceil((LastChunkSize + SizeOf(QuadWord) + 1) / ChunkSize);
 HelpChunksBuff := AllocMem(HelpChunks * ChunkSize);
 try
   Move({%H-}Pointer(PtrUInt(@Buffer) + (FullChunks * ChunkSize))^,HelpChunksBuff^,LastChunkSize);
   {%H-}PByte(PtrUInt(HelpChunksBuff) + LastChunkSize)^ := $80;
+  {$IFDEF x64}
   {%H-}PQuadWord(PtrUInt(HelpChunksBuff) + (HelpChunks * ChunkSize) - SizeOf(QuadWord))^ := MessageLength;
+  {$ELSE}
+  {%H-}PQuadWord(PtrUInt(HelpChunksBuff) + (Int64(HelpChunks) * ChunkSize) - SizeOf(QuadWord))^ := MessageLength;
+  {$ENDIF}
   BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
 finally
   FreeMem(HelpChunksBuff,HelpChunks * ChunkSize);
@@ -381,7 +398,7 @@ If Assigned(Stream) then
         Stream.Position := 0;
         Count := Stream.Size;
       end;
-    MessageLength := Count shl 3;
+    MessageLength := QuadWord(Count shl 3);
     GetMem(Buffer,BufferSize);
     try
       Result := InitialMD5;
@@ -461,7 +478,11 @@ with PMD5Context_Internal(Context)^ do
         BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
         If TSize(FullChunks * ChunkSize) < Size then
           begin
-            TransferSize := {%H-}Size - (FullChunks * ChunkSize);
+            {$IFDEF x64}
+            TransferSize := Size - (FullChunks * ChunkSize);
+            {$ELSE}
+            TransferSize := Size - (Int64(FullChunks) * ChunkSize);
+            {$ENDIF}
             Move(TByteArray(Buffer)[Size - TransferSize],TransferBuffer,TransferSize);
           end;
       end;
