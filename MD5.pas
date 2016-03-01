@@ -9,9 +9,9 @@
 
   MD5 Hash Calculation
 
-  ©František Milt 2015-12-13
+  ©František Milt 2016-03-01
 
-  Version 1.5.4
+  Version 1.5.5
 
 ===============================================================================}
 unit MD5;
