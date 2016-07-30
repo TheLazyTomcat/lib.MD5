@@ -9,9 +9,9 @@
 
   MD5 Hash Calculation
 
-  ©František Milt 2016-03-01
+  ©František Milt 2016-07-10
 
-  Version 1.5.5
+  Version 1.5.6
 
 ===============================================================================}
 unit MD5;
@@ -69,6 +69,7 @@ Function StrToMD5(Str: String): TMD5Hash;
 Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
 Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
 Function SameMD5(A,B: TMD5Hash): Boolean;
+Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;
 
 procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TMemSize); overload;
 Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5Hash; overload;
@@ -98,7 +99,7 @@ Function MD5_Hash(const Buffer; Size: TMemSize): TMD5Hash;
 implementation
 
 uses
-  SysUtils, Math
+  SysUtils, Math, BitOps
   {$IF Defined(FPC) and not Defined(Unicode)}
   (*
     If compiler throws error that LazUTF8 unit cannot be found, you have to
@@ -152,23 +153,6 @@ type
 
 //==============================================================================
 
-Function LeftRotate(Value: UInt32; Shift: Byte): UInt32; register; {$IFNDEF PurePascal}assembler;
-asm
-{$IFDEF x64}
-    MOV   EAX,  ECX
-{$ENDIF}
-    MOV   CL,   DL
-    ROL   EAX,  CL
-end;
-{$ELSE}
-begin
-Shift := Shift and $1F;
-Result := UInt32((Value shl Shift) or (Value shr (32 - Shift)));
-end;
-{$ENDIF}
-
-//------------------------------------------------------------------------------
-
 Function ChunkHash(Hash: TMD5Hash; const Chunk): TMD5Hash;
 var
   i:          Integer;
@@ -190,7 +174,7 @@ For i := 0 to 63 do
     Hash.PartD := Hash.PartC;
     Hash.PartC := Hash.PartB;
     {$IFDEF OverflowCheck}{$Q-}{$ENDIF}
-    Hash.PartB := UInt32(Hash.PartB + LeftRotate(UInt32(Hash.PartA + FuncResult + SinusCoefs[i] + ChunkWords[ModuloCoefs[i]]), ShiftCoefs[i]));
+    Hash.PartB := UInt32(Hash.PartB + ROL(UInt32(Hash.PartA + FuncResult + SinusCoefs[i] + ChunkWords[ModuloCoefs[i]]), ShiftCoefs[i]));
     {$IFDEF OverflowCheck}{$Q+}{$ENDIF}
     Hash.PartA := Temp;
   end;
@@ -259,6 +243,13 @@ Function SameMD5(A,B: TMD5Hash): Boolean;
 begin
 Result := (A.PartA = B.PartA) and (A.PartB = B.PartB) and
           (A.PartC = B.PartC) and (A.PartD = B.PartD);
+end;
+
+//------------------------------------------------------------------------------
+
+Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;
+begin
+Result := Hash;
 end;
 
 //==============================================================================
