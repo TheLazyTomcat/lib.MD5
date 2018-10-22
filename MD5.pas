@@ -9,9 +9,9 @@
 
   MD5 Hash Calculation
 
-  ©František Milt 2017-07-18
+  ©František Milt 2018-10-22
 
-  Version 1.5.7
+  Version 1.5.8
 
   Dependencies:
     AuxTypes    - github.com/ncs-sniper/Lib.AuxTypes
@@ -36,8 +36,16 @@ unit MD5;
 
 {$IFDEF FPC}
   {$MODE ObjFPC}{$H+}
+  {$INLINE ON}
+  {$DEFINE CanInline}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
+{$ELSE}
+  {$IF CompilerVersion >= 17 then}  // Delphi 2005+
+    {$DEFINE CanInline}
+  {$ELSE}
+    {$UNDEF CanInline}
+  {$IFEND}
 {$ENDIF}
 
 interface
@@ -67,8 +75,11 @@ Function MD5toStr(Hash: TMD5Hash): String;
 Function StrToMD5(Str: String): TMD5Hash;
 Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
 Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
+
+Function CompareMD5(A,B: TMD5Hash): Integer;
 Function SameMD5(A,B: TMD5Hash): Boolean;
-Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;
+
+Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
 
 procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TMemSize); overload;
 Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5Hash; overload;
@@ -76,9 +87,9 @@ Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize): TMD5Hash; 
 
 Function BufferMD5(const Buffer; Size: TMemSize): TMD5Hash; overload;
 
-Function AnsiStringMD5(const Str: AnsiString): TMD5Hash;
-Function WideStringMD5(const Str: WideString): TMD5Hash;
-Function StringMD5(const Str: String): TMD5Hash;
+Function AnsiStringMD5(const Str: AnsiString): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function WideStringMD5(const Str: WideString): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function StringMD5(const Str: String): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
 
 Function StreamMD5(Stream: TStream; Count: Int64 = -1): TMD5Hash;
 Function FileMD5(const FileName: String): TMD5Hash;
@@ -242,6 +253,28 @@ Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
 begin
 If not TryStrToMD5(Str,Result) then
   Result := Default;
+end;
+
+//------------------------------------------------------------------------------
+
+Function CompareMD5(A,B: TMD5Hash): Integer;
+var
+  OverlayA: array[0..15] of UInt8 absolute A;
+  OverlayB: array[0..15] of UInt8 absolute B;
+  i:        Integer;
+begin
+Result := 0;
+For i := Low(OverlayA) to High(OverlayA) do
+  If OverlayA[i] > OverlayB[i] then
+    begin
+      Result := -1;
+      Break;
+    end
+  else If OverlayA[i] < OverlayB[i] then
+    begin
+      Result := 1;
+      Break;
+    end;
 end;
 
 //------------------------------------------------------------------------------
