@@ -7,92 +7,164 @@
 -------------------------------------------------------------------------------}
 {===============================================================================
 
-  MD5 Hash Calculation
+  MD5 calculation
 
-  ©František Milt 2018-10-22
+  Version 1.6 (2020-04-19)
 
-  Version 1.5.8
+  Last change 2020-04-19
+
+  ©2015-2020 František Milt
+
+  Contacts:
+    František Milt: frantisek.milt@gmail.com
+
+  Support:
+    If you find this code useful, please consider supporting its author(s) by
+    making a small donation using the following link(s):
+
+      https://www.paypal.me/FMilt
+
+  Changelog:
+    For detailed changelog and history please refer to this git repository:
+
+      github.com/TheLazyTomcat/Lib.MD5
 
   Dependencies:
-    AuxTypes    - github.com/ncs-sniper/Lib.AuxTypes
-    StrRect     - github.com/ncs-sniper/Lib.StrRect
-    BitOps      - github.com/ncs-sniper/Lib.BitOps
-  * SimpleCPUID - github.com/ncs-sniper/Lib.SimpleCPUID
+    AuxTypes           - github.com/TheLazyTomcat/Lib.AuxTypes
+    HashBase           - github.com/TheLazyTomcat/Lib.HashBase
+    AuxClasses         - github.com/TheLazyTomcat/Lib.AuxClasses
+    StrRect            - github.com/TheLazyTomcat/Lib.StrRect
+    StaticMemoryStream - github.com/TheLazyTomcat/Lib.StaticMemoryStream
+    BitOps             - github.com/TheLazyTomcat/Lib.BitOps
+  * SimpleCPUID        - github.com/TheLazyTomcat/Lib.SimpleCPUID
 
   SimpleCPUID might not be needed, see BitOps library for details.
 
 ===============================================================================}
 unit MD5;
 
-{$DEFINE LargeBuffer}
-
-{$IFDEF ENDIAN_BIG}
-  {$MESSAGE FATAL 'Big-endian system not supported'}
+{$IFDEF FPC}
+  {$MODE Delphi}
+  {$DEFINE FPC_DisableWarns}
+  {$MACRO ON}
 {$ENDIF}
 
 {$IFOPT Q+}
-  {$DEFINE OverflowCheck}
-{$ENDIF}
-
-{$IFDEF FPC}
-  {$MODE ObjFPC}{$H+}
-  {$INLINE ON}
-  {$DEFINE CanInline}
-  {$DEFINE FPC_DisableWarns}
-  {$MACRO ON}
-{$ELSE}
-  {$IF CompilerVersion >= 17 then}  // Delphi 2005+
-    {$DEFINE CanInline}
-  {$ELSE}
-    {$UNDEF CanInline}
-  {$IFEND}
+  {$DEFINE OverflowChecks}
 {$ENDIF}
 
 interface
 
 uses
-  Classes, AuxTypes;
+  Classes,
+  AuxTypes, HashBase;
 
+{===============================================================================
+    Common types and constants
+===============================================================================}
+{
+  Note that type TMD5 contains individual bytes of the checksum in the same
+  order as they are presented in its textual representation.
+  
+  Type TMD5Sys has no such guarantee and its internal structure depends on
+  current implementation.
+
+  MD5 does not differ in little and big endian form, as it is not a single
+  quantity, therefore methods like MD5ToLE or MD5ToBE do nothing and are
+  present only for the sake of completeness.
+}
 type
-  TMD5Hash = record
+  TMD5 = array[0..15] of UInt8;
+  PMD5 = ^TMD5;
+
+  TMD5Sys = record
     PartA:  UInt32;
     PartB:  UInt32;
     PartC:  UInt32;
     PartD:  UInt32;
   end;
-  PMD5Hash = ^TMD5Hash;
+  PMD5Sys = ^TMD5Sys;
 
 const
-  InitialMD5: TMD5Hash = (
-    PartA:  $67452301;
-    PartB:  $EFCDAB89;
-    PartC:  $98BADCFE;
-    PartD:  $10325476);
-    
-  ZeroMD5: TMD5Hash = (PartA: 0; PartB: 0; PartC: 0; PartD: 0);
+  InitialMD5: TMD5 = ($01,$23,$45,$67,$89,$AB,$CD,$EF,$FE,$DC,$BA,$98,$76,$54,$32,$10);
+  ZeroMD5:    TMD5 = ($00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00);
 
-Function MD5toStr(Hash: TMD5Hash): String;
-Function StrToMD5(Str: String): TMD5Hash;
-Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
-Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
+type
+  EMD5Exception = class(EHashException);
 
-Function CompareMD5(A,B: TMD5Hash): Integer;
-Function SameMD5(A,B: TMD5Hash): Boolean;
+  EMD5IncompatibleClass = class(EMD5Exception);
+  EMD5ProcessingError   = class(EMD5Exception);
 
-Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
+{-------------------------------------------------------------------------------
+================================================================================
+                                    TMD5Hash
+================================================================================
+-------------------------------------------------------------------------------}
+{===============================================================================
+    TMD5Hash - class declaration
+===============================================================================}
+type
+  TMD5Hash = class(TBlockHash)
+  private
+    fMD5: TMD5Sys;
+    Function GetMD5: TMD5;
+  protected
+    procedure ProcessBlock(const Block); override;
+    procedure ProcessFirst(const Block); override;
+    procedure ProcessLast; override;
+    procedure Initialize; override;
+  public
+    class Function MD5ToSys(MD5: TMD5): TMD5Sys; virtual;
+    class Function MD5FromSys(MD5: TMD5Sys): TMD5; virtual;
+    class Function MD5ToLE(MD5: TMD5): TMD5; virtual;
+    class Function MD5ToBE(MD5: TMD5): TMD5; virtual;
+    class Function MD5FromLE(MD5: TMD5): TMD5; virtual;
+    class Function MD5FromBE(MD5: TMD5): TMD5; virtual;
+    class Function HashSize: TMemSize; override;
+    class Function HashName: String; override;
+    class Function HashEndianness: THashEndianness; override;
+    constructor CreateAndInitFrom(Hash: THashBase); overload; override;
+    constructor CreateAndInitFrom(Hash: TMD5); overload; virtual;
+    procedure Init; override;
+    Function Compare(Hash: THashBase): Integer; override;
+    Function AsString: String; override;
+    procedure FromString(const Str: String); override;
+    procedure FromStringDef(const Str: String; const Default: TMD5); reintroduce;
+    procedure SaveToStream(Stream: TStream; Endianness: THashEndianness = heDefault); override;
+    procedure LoadFromStream(Stream: TStream; Endianness: THashEndianness = heDefault); override;
+    property MD5: TMD5 read GetMD5;
+    property MD5Sys: TMD5Sys read fMD5;
+  end;
 
-procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TMemSize); overload;
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5Hash; overload;
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize): TMD5Hash; overload;
+{===============================================================================
+    Backward compatibility functions
+===============================================================================}
 
-Function BufferMD5(const Buffer; Size: TMemSize): TMD5Hash; overload;
+Function MD5toStr(MD5: TMD5): String;
+Function StrToMD5(Str: String): TMD5;
+Function TryStrToMD5(const Str: String; out MD5: TMD5): Boolean;
+Function StrToMD5Def(const Str: String; Default: TMD5): TMD5;
 
-Function AnsiStringMD5(const Str: AnsiString): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
-Function WideStringMD5(const Str: WideString): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
-Function StringMD5(const Str: String): TMD5Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function CompareMD5(A,B: TMD5): Integer;
+Function SameMD5(A,B: TMD5): Boolean;
 
-Function StreamMD5(Stream: TStream; Count: Int64 = -1): TMD5Hash;
-Function FileMD5(const FileName: String): TMD5Hash;
+Function BinaryCorrectMD5(Hash: TMD5): TMD5;
+
+//------------------------------------------------------------------------------
+
+procedure BufferMD5(var Hash: TMD5; const Buffer; Size: TMemSize); overload;
+
+Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5; overload;
+Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize): TMD5; overload;
+
+Function BufferMD5(const Buffer; Size: TMemSize): TMD5; overload;
+
+Function AnsiStringMD5(const Str: AnsiString): TMD5;
+Function WideStringMD5(const Str: WideString): TMD5;
+Function StringMD5(const Str: String): TMD5;
+
+Function StreamMD5(Stream: TStream; Count: Int64 = -1): TMD5;
+Function FileMD5(const FileName: String): TMD5;
 
 //------------------------------------------------------------------------------
 
@@ -101,45 +173,39 @@ type
 
 Function MD5_Init: TMD5Context;
 procedure MD5_Update(Context: TMD5Context; const Buffer; Size: TMemSize);
-Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TMemSize): TMD5Hash; overload;
-Function MD5_Final(var Context: TMD5Context): TMD5Hash; overload;
-Function MD5_Hash(const Buffer; Size: TMemSize): TMD5Hash;
-
+Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TMemSize): TMD5; overload;
+Function MD5_Final(var Context: TMD5Context): TMD5; overload;
+Function MD5_Hash(const Buffer; Size: TMemSize): TMD5;
 
 implementation
 
 uses
-  SysUtils, Math, BitOps, StrRect;
+  SysUtils,
+  BitOps;
 
 {$IFDEF FPC_DisableWarns}
   {$DEFINE FPCDWM}
   {$DEFINE W4055:={$WARN 4055 OFF}} // Conversion between ordinals and pointers is not portable
-  {$DEFINE W4056:={$WARN 4056 OFF}} // Conversion between ordinals and pointers is not portable
-  {$PUSH}{$WARN 2005 OFF} // Comment level $1 found
-  {$IF Defined(FPC) and (FPC_FULLVERSION >= 30000)}
-    {$DEFINE W5092:={$WARN 5092 OFF}} // Variable "$1" of a managed type does not seem to be initialized
-  {$ELSE}
-    {$DEFINE W5092:=}
-  {$IFEND}
-  {$POP}
+  {$DEFINE W4056:={$WARN 4056 OFF}} // Conversion between ordinals and pointers is not portable  
+  {$DEFINE W5057:={$WARN 5057 OFF}} // Local variable "$1" does not seem to be initialized
 {$ENDIF}
 
+{-------------------------------------------------------------------------------
+================================================================================
+                                    TMD5Hash
+================================================================================
+-------------------------------------------------------------------------------}
+{===============================================================================
+    TMD5Hash - calculation constants
+===============================================================================}
 const
-  ChunkSize       = 64;                           // 512 bits
-{$IFDEF LargeBuffer}
-  ChunksPerBuffer = 16384;                        // => 1MiB BufferSize
-{$ELSE}
-  ChunksPerBuffer = 64;                           // => 4KiB BufferSize
-{$ENDIF}
-  BufferSize      = ChunksPerBuffer * ChunkSize;  // size of read buffer
-
-  ShiftCoefs: array[0..63] of UInt8 = (
+  MD5_COEF_SHIFT: array[0..63] of UInt8 = (
     7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,
     5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,
     4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,
     6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21);
 
-  SinusCoefs: array[0..63] of UInt32 = (
+  MD5_COEF_SIN: array[0..63] of UInt32 = (
     $D76AA478,$E8C7B756,$242070DB,$C1BDCEEE,$F57C0FAF,$4787C62A,$A8304613,$FD469501,
     $698098D8,$8B44F7AF,$FFFF5BB1,$895CD7BE,$6B901122,$FD987193,$A679438E,$49B40821,
     $F61E2562,$C040B340,$265E5A51,$E9B6C7AA,$D62F105D,$02441453,$D8A1E681,$E7D3FBC8,
@@ -149,35 +215,38 @@ const
     $F4292244,$432AFF97,$AB9423A7,$FC93A039,$655B59C3,$8F0CCC92,$FFEFF47D,$85845DD1,
     $6FA87E4F,$FE2CE6E0,$A3014314,$4E0811A1,$F7537E82,$BD3AF235,$2AD7D2BB,$EB86D391);
 
-  ModuloCoefs: array[0..63] of UInt8 = (
+  MD5_COEF_MOD: array[0..63] of UInt8 = (
     0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
     1,  6, 11,  0,  5, 10, 15,  4,  9, 14,  3,  8, 13,  2,  7, 12,
     5,  8, 11, 14,  1,  4,  7, 10, 13,  0,  3,  6,  9, 12, 15,  2,
     0,  7, 14,  5, 12,  3, 10,  1,  8, 15,  6, 13,  4, 11,  2,  9);
 
-type
-  TChunkBuffer = array[0..ChunkSize - 1] of UInt8;
-  PChunkBuffer = ^TChunkBuffer;
+{===============================================================================
+    TMD5Hash - class implementation
+===============================================================================}
+{-------------------------------------------------------------------------------
+    TMD5Hash - private methods
+-------------------------------------------------------------------------------}
 
-  TMD5Context_Internal = record
-    MessageHash:    TMD5Hash;
-    MessageLength:  UInt64;
-    TransferSize:   UInt32;
-    TransferBuffer: TChunkBuffer;
-  end;
-  PMD5Context_Internal = ^TMD5Context_Internal;
-
-//==============================================================================
-
-Function ChunkHash(Hash: TMD5Hash; const Chunk): TMD5Hash;
-var
-  i:          Integer;
-  Temp:       UInt32;
-  FuncResult: UInt32;
-  ChunkWords: array[0..15] of UInt32 absolute Chunk;
+Function TMD5Hash.GetMD5: TMD5;
 begin
-Result := Hash;
-For i := 0 to 63 do
+Result := MD5FromSys(fMD5);
+end;
+
+{-------------------------------------------------------------------------------
+    TMD5Hash - protected methods
+-------------------------------------------------------------------------------}
+
+procedure TMD5Hash.ProcessBlock(const Block);
+var
+  Hash:       TMD5Sys;
+  BlockWords: array[0..15] of UInt32 absolute Block;
+  i:          Integer;
+  FuncResult: UInt32;
+  Temp:       UInt32;
+begin
+Hash := fMD5;
+For i := 0 to 63 do // 64 cycles
   begin
     case i of
        0..15: FuncResult := (Hash.PartB and Hash.PartC) or ((not Hash.PartB) and Hash.PartD);
@@ -189,304 +258,566 @@ For i := 0 to 63 do
     Temp := Hash.PartD;
     Hash.PartD := Hash.PartC;
     Hash.PartC := Hash.PartB;
-    {$IFDEF OverflowCheck}{$Q-}{$ENDIF}
-    Hash.PartB := UInt32(Hash.PartB + ROL(UInt32(Hash.PartA + FuncResult + SinusCoefs[i] + ChunkWords[ModuloCoefs[i]]), ShiftCoefs[i]));
-    {$IFDEF OverflowCheck}{$Q+}{$ENDIF}
+    {$IFDEF OverflowChecks}{$Q-}{$ENDIF}
+    Hash.PartB := UInt32(Hash.PartB + ROL(UInt32(Hash.PartA + FuncResult +
+      MD5_COEF_SIN[i] + BlockWords[MD5_COEF_MOD[i]]),MD5_COEF_SHIFT[i]));
+    {$IFDEF OverflowChecks}{$Q+}{$ENDIF}
     Hash.PartA := Temp;
   end;
-{$IFDEF OverflowCheck}{$Q-}{$ENDIF}
-Result.PartA := UInt32(Result.PartA + Hash.PartA);
-Result.PartB := UInt32(Result.PartB + Hash.PartB);
-Result.PartC := UInt32(Result.PartC + Hash.PartC);
-Result.PartD := UInt32(Result.PartD + Hash.PartD);
-{$IFDEF OverflowCheck}{$Q+}{$ENDIF}
+{$IFDEF OverflowChecks}{$Q-}{$ENDIF}
+fMD5.PartA := UInt32(fMD5.PartA + Hash.PartA);
+fMD5.PartB := UInt32(fMD5.PartB + Hash.PartB);
+fMD5.PartC := UInt32(fMD5.PartC + Hash.PartC);
+fMD5.PartD := UInt32(fMD5.PartD + Hash.PartD);
+{$IFDEF OverflowChecks}{$Q+}{$ENDIF}
 end;
 
-//==============================================================================
+//------------------------------------------------------------------------------
 
-Function MD5toStr(Hash: TMD5Hash): String;
-var
-  HashArray:  array[0..15] of UInt8 absolute Hash;
-  i:          Integer;
+procedure TMD5Hash.ProcessFirst(const Block);
 begin
-Result := StringOfChar('0',32);
-For i := Low(HashArray) to High(HashArray) do
+inherited;
+ProcessBlock(Block);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD5Hash.ProcessLast;
+begin
+If (fBlockSize - fTempCount) >= (SizeOf(UInt64) + 1) then
   begin
-    Result[(i * 2) + 2] := IntToHex(HashArray[i] and $0F,1)[1];
-    Result[(i * 2) + 1] := IntToHex(HashArray[i] shr 4,1)[1];
-  end;
-end;
-
-//------------------------------------------------------------------------------
-
-{$IFDEF FPCDWM}{$PUSH}W5092{$ENDIF}
-Function StrToMD5(Str: String): TMD5Hash;
-var
-  HashArray:  array[0..15] of UInt8 absolute Result;
-  i:          Integer;
-begin
-If Length(Str) < 32 then
-  Str := StringOfChar('0',32 - Length(Str)) + Str
-else
-  If Length(Str) > 32 then
-    Str := Copy(Str,Length(Str) - 31,32);
-For i := 0 to 15 do
-  HashArray[i] := StrToInt('$' + Copy(Str,(i * 2) + 1,2));
-end;
-{$IFDEF FPCDWM}{$POP}{$ENDIF}
-
-//------------------------------------------------------------------------------
-
-Function TryStrToMD5(const Str: String; out Hash: TMD5Hash): Boolean;
-begin
-try
-  Hash := StrToMD5(Str);
-  Result := True;
-except
-  Result := False;
-end;
-end;
-
-//------------------------------------------------------------------------------
-
-Function StrToMD5Def(const Str: String; Default: TMD5Hash): TMD5Hash;
-begin
-If not TryStrToMD5(Str,Result) then
-  Result := Default;
-end;
-
-//------------------------------------------------------------------------------
-
-Function CompareMD5(A,B: TMD5Hash): Integer;
-var
-  OverlayA: array[0..15] of UInt8 absolute A;
-  OverlayB: array[0..15] of UInt8 absolute B;
-  i:        Integer;
-begin
-Result := 0;
-For i := Low(OverlayA) to High(OverlayA) do
-  If OverlayA[i] > OverlayB[i] then
-    begin
-      Result := -1;
-      Break;
-    end
-  else If OverlayA[i] < OverlayB[i] then
-    begin
-      Result := 1;
-      Break;
-    end;
-end;
-
-//------------------------------------------------------------------------------
-
-Function SameMD5(A,B: TMD5Hash): Boolean;
-begin
-Result := (A.PartA = B.PartA) and (A.PartB = B.PartB) and
-          (A.PartC = B.PartC) and (A.PartD = B.PartD);
-end;
-
-//------------------------------------------------------------------------------
-
-Function BinaryCorrectMD5(Hash: TMD5Hash): TMD5Hash;
-begin
-Result := Hash;
-end;
-
-//==============================================================================
-
-procedure BufferMD5(var Hash: TMD5Hash; const Buffer; Size: TMemSize);
-var
-  i:    TMemSize;
-  Buff: PChunkBuffer;
-begin
-If Size > 0 then
-  begin
-    If (Size mod ChunkSize) = 0 then
-      begin
-        Buff := @Buffer;
-        For i := 0 to Pred(Size div ChunkSize) do
-          begin
-            Hash := ChunkHash(Hash,Buff^);
-            Inc(Buff);
-          end;
-      end
-    else raise Exception.CreateFmt('BufferMD5: Buffer size is not divisible by %d.',[ChunkSize]);
-  end;
-end;
-
-//------------------------------------------------------------------------------
-
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5Hash;
-var
-  FullChunks:     TMemSize;
-  LastChunkSize:  TMemSize;
-  HelpChunks:     TMemSize;
-  HelpChunksBuff: Pointer;
-begin
-Result := Hash;
-FullChunks := Size div ChunkSize;
-If FullChunks > 0 then BufferMD5(Result,Buffer,FullChunks * ChunkSize);
-LastChunkSize := Size - (UInt64(FullChunks) * ChunkSize);
-HelpChunks := Ceil((LastChunkSize + SizeOf(UInt64) + 1) / ChunkSize);
-HelpChunksBuff := AllocMem(HelpChunks * ChunkSize);
-try
-{$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-  Move(Pointer(PtrUInt(@Buffer) + (FullChunks * ChunkSize))^,HelpChunksBuff^,LastChunkSize);
-  PUInt8(PtrUInt(HelpChunksBuff) + LastChunkSize)^ := $80;
-  PUInt64(PtrUInt(HelpChunksBuff) + (UInt64(HelpChunks) * ChunkSize) - SizeOf(UInt64))^ := MessageLength;
-{$IFDEF FPCDWM}{$POP}{$ENDIF}
-  BufferMD5(Result,HelpChunksBuff^,HelpChunks * ChunkSize);
-finally
-  FreeMem(HelpChunksBuff,HelpChunks * ChunkSize);
-end;
-end;
-
-//------------------------------------------------------------------------------
-
-Function LastBufferMD5(Hash: TMD5Hash; const Buffer; Size: TMemSize): TMD5Hash;
-begin
-Result := LastBufferMD5(Hash,Buffer,Size,UInt64(Size) shl 3);
-end;
-
-//==============================================================================
-
-Function BufferMD5(const Buffer; Size: TMemSize): TMD5Hash;
-begin
-Result := LastBufferMD5(InitialMD5,Buffer,Size);
-end;
-
-//==============================================================================
-
-Function AnsiStringMD5(const Str: AnsiString): TMD5Hash;
-begin
-Result := BufferMD5(PAnsiChar(Str)^,Length(Str) * SizeOf(AnsiChar));
-end;
-
-//------------------------------------------------------------------------------
-
-Function WideStringMD5(const Str: WideString): TMD5Hash;
-begin
-Result := BufferMD5(PWideChar(Str)^,Length(Str) * SizeOf(WideChar));
-end;
-
-//------------------------------------------------------------------------------
-
-Function StringMD5(const Str: String): TMD5Hash;
-begin
-Result := BufferMD5(PChar(Str)^,Length(Str) * SizeOf(Char));
-end;
-
-//==============================================================================
-
-Function StreamMD5(Stream: TStream; Count: Int64 = -1): TMD5Hash;
-var
-  Buffer:         Pointer;
-  BytesRead:      Integer;
-  MessageLength:  UInt64;
-begin
-If Assigned(Stream) then
-  begin
-    If Count = 0 then
-      Count := Stream.Size - Stream.Position;
-    If Count < 0 then
-      begin
-        Stream.Position := 0;
-        Count := Stream.Size;
-      end;
-    MessageLength := UInt64(Count shl 3);
-    GetMem(Buffer,BufferSize);
-    try
-      Result := InitialMD5;
-      repeat
-        BytesRead := Stream.Read(Buffer^,Min(BufferSize,Count));
-        If BytesRead < BufferSize then
-          Result := LastBufferMD5(Result,Buffer^,BytesRead,MessageLength)
-        else
-          BufferMD5(Result,Buffer^,BytesRead);
-        Dec(Count,BytesRead);
-      until BytesRead < BufferSize;
-    finally
-      FreeMem(Buffer,BufferSize);
-    end;
+    // padding and length can fit
+  {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
+    FillChar(Pointer(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^,fBlockSize - fTempCount,0);
+    PUInt8(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^ := $80;
+    PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ := UInt64(fProcessedBytes) * 8;
+  {$IFDEF FPCDWM}{$POP}{$ENDIF}
+    ProcessBlock(fTempBlock^);
   end
-else raise Exception.Create('StreamMD5: Stream is not assigned.');
+else
+  begin
+    // padding and length cannot fit  
+    If fBlockSize > fTempCount then
+      begin
+      {$IFDEF FPCDWM}{$PUSH}W4055{$ENDIF}
+        FillChar(Pointer(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^,fBlockSize - fTempCount,0);
+        PUInt8(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^ := $80;
+      {$IFDEF FPCDWM}{$POP}{$ENDIF}
+        ProcessBlock(fTempBlock^);
+        FillChar(fTempBlock^,fBlockSize,0);
+      {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
+        PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ := UInt64(fProcessedBytes) * 8;
+      {$IFDEF FPCDWM}{$POP}{$ENDIF}
+        ProcessBlock(fTempBlock^);        
+      end
+    else raise EMD5ProcessingError.CreateFmt('TMD5Hash.ProcessLast: Invalid data transfer (%d).',[fTempCount]);
+  end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function FileMD5(const FileName: String): TMD5Hash;
-var
-  FileStream: TFileStream;
+procedure TMD5Hash.Initialize;
 begin
-FileStream := TFileStream.Create(StrToRTL(FileName), fmOpenRead or fmShareDenyWrite);
+fBlockSize := 64; // 512 bits
+inherited;
+fMD5 := MD5ToSys(ZeroMD5);
+end;
+
+{-------------------------------------------------------------------------------
+    TMD5Hash - public methods
+-------------------------------------------------------------------------------}
+
+class Function TMD5Hash.MD5ToSys(MD5: TMD5): TMD5Sys;
+var
+  Temp: TMD5Sys absolute MD5;
+begin
+Result := Temp;
+{$IFDEF ENDIAN_BIG}
+EndianSwap(Result.PartA);
+EndianSwap(Result.PartB);
+EndianSwap(Result.PartC);
+EndianSwap(Result.PartD);
+{$ENDIF}
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.MD5FromSys(MD5: TMD5Sys): TMD5;
+var
+  Temp: TMD5Sys absolute Result;
+begin
+Temp := MD5;
+{$IFDEF ENDIAN_BIG}
+EndianSwap(Temp.PartA);
+EndianSwap(Temp.PartB);
+EndianSwap(Temp.PartC);
+EndianSwap(Temp.PartD);
+{$ENDIF}
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.MD5ToLE(MD5: TMD5): TMD5;
+begin
+Result := MD5;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.MD5ToBE(MD5: TMD5): TMD5;
+begin
+Result := MD5;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.MD5FromLE(MD5: TMD5): TMD5;
+begin
+Result := MD5;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.MD5FromBE(MD5: TMD5): TMD5;
+begin
+Result := MD5;
+end;
+ 
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.HashSize: TMemSize;
+begin
+Result := SizeOf(TMD5);
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.HashName: String;
+begin
+Result := 'MD5';
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD5Hash.HashEndianness: THashEndianness;
+begin
+Result := heBig;
+end;
+
+//------------------------------------------------------------------------------
+
+constructor TMD5Hash.CreateAndInitFrom(Hash: THashBase);
+begin
+CreateAndInit;
+If Hash is TMD5Hash then
+  fMD5 := TMD5Hash(Hash).MD5Sys
+else
+  raise EMD5IncompatibleClass.CreateFmt('TMD5Hash.CreateAndInitFrom: Incompatible class (%s).',[Hash.ClassName]);
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+constructor TMD5Hash.CreateAndInitFrom(Hash: TMD5);
+begin
+CreateAndInit;
+fMD5 := MD5ToSys(Hash);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD5Hash.Init;
+begin
+inherited;
+fMD5 := MD5toSys(InitialMD5);
+end;
+
+//------------------------------------------------------------------------------
+
+Function TMD5Hash.Compare(Hash: THashBase): Integer;
+var
+  A,B:  TMD5;
+  i:    Integer;
+begin
+If Hash is TMD5Hash then
+  begin
+    Result := 0;
+    A := MD5FromSys(fMD5);
+    B := TMD5Hash(Hash).MD5;
+    For i := Low(A) to High(A) do
+      If A[i] > B[i] then
+        begin
+          Result := +1;
+          Break;
+        end
+      else If A[i] < B[i] then
+        begin
+          Result := -1;
+          Break;
+        end;
+  end
+else raise EMD5IncompatibleClass.CreateFmt('TMD5Hash.Compare: Incompatible class (%s).',[Hash.ClassName]);
+end;
+
+//------------------------------------------------------------------------------
+
+Function TMD5Hash.AsString: String;
+var
+  Temp: TMD5;
+  i:    Integer;
+begin
+Result := StringOfChar('0',HashSize * 2);
+Temp := MD5FromSys(fMD5);
+For i := Low(Temp) to High(Temp) do
+  begin
+    Result[(i * 2) + 2] := IntToHex(Temp[i] and $0F,1)[1];
+    Result[(i * 2) + 1] := IntToHex(Temp[i] shr 4,1)[1];
+  end;
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD5Hash.FromString(const Str: String);
+var
+  TempStr:  String;
+  i:        Integer;
+  MD5:      TMD5;
+begin
+If Length(Str) < Integer(HashSize * 2) then
+  TempStr := StringOfChar('0',Integer(HashSize * 2) - Length(Str)) + Str
+else If Length(Str) > Integer(HashSize * 2) then
+  TempStr := Copy(Str,Length(Str) - Pred(Integer(HashSize * 2)),Integer(HashSize * 2))
+else
+  TempStr := Str;
+For i := Low(MD5) to High(MD5) do
+  MD5[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
+fMD5 := MD5ToSys(MD5);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD5Hash.FromStringDef(const Str: String; const Default: TMD5);
+begin
+inherited FromStringDef(Str,Default);
+If not TryFromString(Str) then
+  fMD5 := MD5ToSys(Default);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD5Hash.SaveToStream(Stream: TStream; Endianness: THashEndianness = heDefault);
+var
+  Temp: TMD5;
+begin
+case Endianness of
+  heSystem: Temp := {$IFDEF ENDIAN_BIG}MD5ToBE{$ELSE}MD5ToLE{$ENDIF}(MD5FromSys(fMD5));
+  heLittle: Temp := MD5ToLE(MD5FromSys(fMD5));
+  heBig:    Temp := MD5ToBE(MD5FromSys(fMD5));
+else
+ {heDefault}
+  Temp := MD5FromSys(fMD5);
+end;
+Stream.WriteBuffer(Temp,SizeOf(TMD5));
+end;
+
+//------------------------------------------------------------------------------
+
+{$IFDEF FPCDWM}{$PUSH}W5057{$ENDIF}
+procedure TMD5Hash.LoadFromStream(Stream: TStream; Endianness: THashEndianness = heDefault);
+var
+  Temp: TMD5;
+begin
+Stream.ReadBuffer(Temp,SizeOf(TMD5));
+case Endianness of
+  heSystem: fMD5 := MD5ToSys({$IFDEF ENDIAN_BIG}MD5FromBE{$ELSE}MD5FromLE{$ENDIF}(Temp));
+  heLittle: fMD5 := MD5ToSys(MD5FromLE(Temp));
+  heBig:    fMD5 := MD5ToSys(MD5FromBE(Temp));
+else
+ {heDefault}
+  fMD5 := MD5ToSys(Temp);
+end;
+end;
+{$IFDEF FPCDWM}{$POP}{$ENDIF}
+
+
+{===============================================================================
+    Backward compatibility functions
+===============================================================================}
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - utility functions
+-------------------------------------------------------------------------------}
+
+Function MD5toStr(MD5: TMD5): String;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.CreateAndInitFrom(MD5);
 try
-  Result := StreamMD5(FileStream);
+  Result := Hash.AsString;
 finally
-  FileStream.Free;
+  Hash.Free;
 end;
 end;
 
-//==============================================================================
+//------------------------------------------------------------------------------
+
+Function StrToMD5(Str: String): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.FromString(Str);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function TryStrToMD5(const Str: String; out MD5: TMD5): Boolean;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Result := Hash.TryFromString(Str);
+  If Result then
+    MD5 := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function StrToMD5Def(const Str: String; Default: TMD5): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.FromStringDef(Str,Default);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function CompareMD5(A,B: TMD5): Integer;
+var
+  HashA:  TMD5Hash;
+  HashB:  TMD5Hash;
+begin
+HashA := TMD5Hash.CreateAndInitFrom(A);
+try
+  HashB := TMD5Hash.CreateAndInitFrom(B);
+  try
+    Result := HashA.Compare(HashB);
+  finally
+    HashB.Free;
+  end;
+finally
+  HashA.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function SameMD5(A,B: TMD5): Boolean;
+var
+  HashA:  TMD5Hash;
+  HashB:  TMD5Hash;
+begin
+HashA := TMD5Hash.CreateAndInitFrom(A);
+try
+  HashB := TMD5Hash.CreateAndInitFrom(B);
+  try
+    Result := HashA.Same(HashB);
+  finally
+    HashB.Free;
+  end;
+finally
+  HashA.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function BinaryCorrectMD5(Hash: TMD5): TMD5;
+begin
+Result := Hash;
+end;
+
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - processing functions
+-------------------------------------------------------------------------------}
+
+procedure BufferMD5(var Hash: TMD5; const Buffer; Size: TMemSize);
+var
+  Hasher: TMD5Hash;
+begin
+Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+try
+  If Size > 0 then
+    begin
+      If (Size mod Hasher.BlockSize) = 0 then
+        begin
+          Hasher.Update(Buffer,Size);
+          Hash := Hasher.MD5;
+        end
+      else raise EMD5ProcessingError.CreateFmt('BufferMD5: Buffer size (%d) is not divisible by %d.',[Size,Hasher.BlockSize]);
+    end;
+finally
+  Hasher.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5;
+var
+  Hasher: TMD5Hash;
+begin
+Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+try
+  Hasher.ProcessedBytes := (MessageLength shr 3) - Size;
+  Hasher.Final(Buffer,Size);
+  Result := Hasher.MD5; 
+finally
+  Hasher.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize): TMD5;
+var
+  Hasher: TMD5Hash;
+begin
+Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+try
+  Hasher.Final(Buffer,Size);
+  Result := Hasher.MD5;
+finally
+  Hasher.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function BufferMD5(const Buffer; Size: TMemSize): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashBuffer(Buffer,Size);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function AnsiStringMD5(const Str: AnsiString): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashAnsiString(Str);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+ 
+//------------------------------------------------------------------------------
+
+Function WideStringMD5(const Str: WideString): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashWideString(Str);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function StringMD5(const Str: String): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashString(Str);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+ 
+//------------------------------------------------------------------------------
+
+Function StreamMD5(Stream: TStream; Count: Int64 = -1): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashStream(Stream,Count);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function FileMD5(const FileName: String): TMD5;
+var
+  Hash: TMD5Hash;
+begin
+Hash := TMD5Hash.Create;
+try
+  Hash.HashFile(FileName);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
+end;
+
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - context functions
+-------------------------------------------------------------------------------}
 
 Function MD5_Init: TMD5Context;
+var
+  Temp: TMD5Hash;
 begin
-Result := AllocMem(SizeOf(TMD5Context_Internal));
-with PMD5Context_Internal(Result)^ do
-  begin
-    MessageHash := InitialMD5;
-    MessageLength := 0;
-    TransferSize := 0;
-  end;
+Temp := TMD5Hash.CreateAndInit;
+Result := TMD5Context(Temp);
 end;
 
 //------------------------------------------------------------------------------
 
 procedure MD5_Update(Context: TMD5Context; const Buffer; Size: TMemSize);
-var
-  FullChunks:     TMemSize;
-  RemainingSize:  TMemSize;
 begin
-with PMD5Context_Internal(Context)^ do
-  begin
-    If TransferSize > 0 then
-      begin
-        If Size >= (ChunkSize - TransferSize) then
-          begin
-            Inc(MessageLength,(ChunkSize - TransferSize) shl 3);
-            Move(Buffer,TransferBuffer[TransferSize],ChunkSize - TransferSize);
-            BufferMD5(MessageHash,TransferBuffer,ChunkSize);
-            RemainingSize := Size - (ChunkSize - TransferSize);
-            TransferSize := 0;
-          {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-            MD5_Update(Context,Pointer(PtrUInt(@Buffer) + (Size - RemainingSize))^,RemainingSize);
-          {$IFDEF FPCDWM}{$POP}{$ENDIF}
-          end
-        else
-          begin
-            Inc(MessageLength,Size shl 3);
-            Move(Buffer,TransferBuffer[TransferSize],Size);
-            Inc(TransferSize,Size);
-          end;  
-      end
-    else
-      begin
-        Inc(MessageLength,Size shl 3);
-        FullChunks := Size div ChunkSize;
-        BufferMD5(MessageHash,Buffer,FullChunks * ChunkSize);
-        If TMemSize(FullChunks * ChunkSize) < Size then
-          begin
-            TransferSize := Size - (UInt64(FullChunks) * ChunkSize);
-          {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-            Move(Pointer(PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize);
-          {$IFDEF FPCDWM}{$POP}{$ENDIF}
-          end;
-      end;
-  end;
+TMD5Hash(Context).Update(Buffer,Size);
 end;
 
 //------------------------------------------------------------------------------
 
-Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TMemSize): TMD5Hash;
+Function MD5_Final(var Context: TMD5Context; const Buffer; Size: TMemSize): TMD5;
 begin
 MD5_Update(Context,Buffer,Size);
 Result := MD5_Final(Context);
@@ -494,19 +825,26 @@ end;
 
 //------------------------------------------------------------------------------
 
-Function MD5_Final(var Context: TMD5Context): TMD5Hash;
+Function MD5_Final(var Context: TMD5Context): TMD5;
 begin
-with PMD5Context_Internal(Context)^ do
-  Result := LastBufferMD5(MessageHash,TransferBuffer,TransferSize,MessageLength);
-FreeMem(Context,SizeOf(TMD5Context_Internal));
-Context := nil;
+TMD5Hash(Context).Final;
+Result := TMD5Hash(Context).MD5;
+FreeAndNil(TMD5Hash(Context));
 end;
 
 //------------------------------------------------------------------------------
 
-Function MD5_Hash(const Buffer; Size: TMemSize): TMD5Hash;
+Function MD5_Hash(const Buffer; Size: TMemSize): TMD5;
+var
+  Hash: TMD5Hash;
 begin
-Result := LastBufferMD5(InitialMD5,Buffer,Size);
+Hash := TMD5Hash.Create;
+try
+  Hash.HashBuffer(Buffer,Size);
+  Result := Hash.MD5;
+finally
+  Hash.Free;
+end;
 end;
 
 end.
