@@ -11,7 +11,7 @@
 
   Version 1.6 (2020-04-19)
 
-  Last change 2020-04-19
+  Last change 2020-04-20
 
   ©2015-2020 František Milt
 
@@ -401,7 +401,8 @@ end;
 
 class Function TMD5Hash.HashEndianness: THashEndianness;
 begin
-Result := heLittle;
+// first byte is most significant
+Result := heBig;
 end;
 
 //------------------------------------------------------------------------------
