@@ -148,14 +148,14 @@ Function StrToMD5Def(const Str: String; Default: TMD5): TMD5;
 Function CompareMD5(A,B: TMD5): Integer;
 Function SameMD5(A,B: TMD5): Boolean;
 
-Function BinaryCorrectMD5(Hash: TMD5): TMD5;
+Function BinaryCorrectMD5(MD5: TMD5): TMD5;
 
 //------------------------------------------------------------------------------
 
-procedure BufferMD5(var Hash: TMD5; const Buffer; Size: TMemSize); overload;
+procedure BufferMD5(var MD5: TMD5; const Buffer; Size: TMemSize); overload;
 
-Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5; overload;
-Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize): TMD5; overload;
+Function LastBufferMD5(MD5: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5; overload;
+Function LastBufferMD5(MD5: TMD5; const Buffer; Size: TMemSize): TMD5; overload;
 
 Function BufferMD5(const Buffer; Size: TMemSize): TMD5; overload;
 
@@ -646,63 +646,63 @@ end;
 
 //------------------------------------------------------------------------------
 
-Function BinaryCorrectMD5(Hash: TMD5): TMD5;
+Function BinaryCorrectMD5(MD5: TMD5): TMD5;
 begin
-Result := Hash;
+Result := MD5;
 end;
 
 {-------------------------------------------------------------------------------
     Backward compatibility functions - processing functions
 -------------------------------------------------------------------------------}
 
-procedure BufferMD5(var Hash: TMD5; const Buffer; Size: TMemSize);
+procedure BufferMD5(var MD5: TMD5; const Buffer; Size: TMemSize);
 var
-  Hasher: TMD5Hash;
+  Hash: TMD5Hash;
 begin
-Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+Hash := TMD5Hash.CreateAndInitFrom(MD5);
 try
   If Size > 0 then
     begin
-      If (Size mod Hasher.BlockSize) = 0 then
+      If (Size mod Hash.BlockSize) = 0 then
         begin
-          Hasher.Update(Buffer,Size);
-          Hash := Hasher.MD5;
+          Hash.Update(Buffer,Size);
+          MD5 := Hash.MD5;
         end
-      else raise EMD5ProcessingError.CreateFmt('BufferMD5: Buffer size (%d) is not divisible by %d.',[Size,Hasher.BlockSize]);
+      else raise EMD5ProcessingError.CreateFmt('BufferMD5: Buffer size (%d) is not divisible by %d.',[Size,Hash.BlockSize]);
     end;
 finally
-  Hasher.Free;
+  Hash.Free;
 end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5;
+Function LastBufferMD5(MD5: TMD5; const Buffer; Size: TMemSize; MessageLength: UInt64): TMD5;
 var
-  Hasher: TMD5Hash;
+  Hash: TMD5Hash;
 begin
-Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+Hash := TMD5Hash.CreateAndInitFrom(MD5);
 try
-  Hasher.ProcessedBytes := (MessageLength shr 3) - Size;
-  Hasher.Final(Buffer,Size);
-  Result := Hasher.MD5; 
+  Hash.ProcessedBytes := (MessageLength shr 3) - Size;
+  Hash.Final(Buffer,Size);
+  Result := Hash.MD5;
 finally
-  Hasher.Free;
+  Hash.Free;
 end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function LastBufferMD5(Hash: TMD5; const Buffer; Size: TMemSize): TMD5;
+Function LastBufferMD5(MD5: TMD5; const Buffer; Size: TMemSize): TMD5;
 var
-  Hasher: TMD5Hash;
+  Hash: TMD5Hash;
 begin
-Hasher := TMD5Hash.CreateAndInitFrom(Hash);
+Hash := TMD5Hash.CreateAndInitFrom(MD5);
 try
-  Hasher.Final(Buffer,Size);
-  Result := Hasher.MD5;
+  Hash.Final(Buffer,Size);
+  Result := Hash.MD5;
 finally
-  Hasher.Free;
+  Hash.Free;
 end;
 end;
 
