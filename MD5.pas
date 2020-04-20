@@ -401,7 +401,7 @@ end;
 
 class Function TMD5Hash.HashEndianness: THashEndianness;
 begin
-Result := heBig;
+Result := heLittle;
 end;
 
 //------------------------------------------------------------------------------
