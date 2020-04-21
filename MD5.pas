@@ -11,7 +11,7 @@
 
   Version 1.6 (2020-04-19)
 
-  Last change 2020-04-20
+  Last change 2020-04-22
 
   ©2015-2020 František Milt
 
@@ -409,7 +409,7 @@ end;
 
 constructor TMD5Hash.CreateAndInitFrom(Hash: THashBase);
 begin
-CreateAndInit;
+inherited CreateAndInitFrom(Hash);
 If Hash is TMD5Hash then
   fMD5 := TMD5Hash(Hash).MD5Sys
 else
