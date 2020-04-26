@@ -63,9 +63,9 @@ uses
     Common types and constants
 ===============================================================================}
 {
-  Note that type TMD5 contains individual bytes of the checksum in the same
-  order as they are presented in its textual representation.
-  
+  Bytes in type TMD5 are always ordered from most significant byte to least
+  significant byte (big endian).
+
   Type TMD5Sys has no such guarantee and its internal structure depends on
   current implementation.
 
