@@ -290,7 +290,8 @@ If (fBlockSize - fTempCount) >= (SizeOf(UInt64) + 1) then
   {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
     FillChar(Pointer(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^,fBlockSize - fTempCount,0);
     PUInt8(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^ := $80;
-    PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ := UInt64(fProcessedBytes) * 8;
+    PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ :=
+      {$IFDEF ENDIAN_BIG}EndianSwap{$ENDIF}(UInt64(fProcessedBytes) * 8);
   {$IFDEF FPCDWM}{$POP}{$ENDIF}
     ProcessBlock(fTempBlock^);
   end
@@ -306,7 +307,8 @@ else
         ProcessBlock(fTempBlock^);
         FillChar(fTempBlock^,fBlockSize,0);
       {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-        PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ := UInt64(fProcessedBytes) * 8;
+        PUInt64(PtrUInt(fTempBlock) - SizeOf(UInt64) + PtrUInt(fBlockSize))^ :=
+          {$IFDEF ENDIAN_BIG}EndianSwap{$ENDIF}(UInt64(fProcessedBytes) * 8);
       {$IFDEF FPCDWM}{$POP}{$ENDIF}
         ProcessBlock(fTempBlock^);        
       end
