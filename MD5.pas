@@ -11,7 +11,7 @@
 
   Version 1.6 (2020-04-19)
 
-  Last change 2020-04-28
+  Last change 2020-05-10
 
   ©2015-2020 František Milt
 
@@ -74,10 +74,10 @@ uses
   present only for the sake of completeness.
 }
 type
-  TMD5 = array[0..15] of UInt8;
+  TMD5 = packed array[0..15] of UInt8;
   PMD5 = ^TMD5;
 
-  TMD5Sys = record
+  TMD5Sys = packed record
     PartA:  UInt32;
     PartB:  UInt32;
     PartC:  UInt32;
@@ -240,7 +240,7 @@ end;
 procedure TMD5Hash.ProcessBlock(const Block);
 var
   Hash:       TMD5Sys;
-  BlockWords: array[0..15] of UInt32 absolute Block;
+  BlockWords: packed array[0..15] of UInt32 absolute Block;
   i:          Integer;
   FuncResult: UInt32;
   Temp:       UInt32;
