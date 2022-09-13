@@ -11,9 +11,9 @@
 
   Version 1.6.1 (2020-07-13)
 
-  Last change 2021-04-12
+  Last change 2022-09-13
 
-  ©2015-2021 František Milt
+  ©2015-2022 František Milt
 
   Contacts:
     František Milt: frantisek.milt@gmail.com
@@ -106,10 +106,9 @@ type
 ===============================================================================}
 type
   TMD5Hash = class(TBlockHash)
-  private
-    fMD5: TMD5Sys;
-    Function GetMD5: TMD5;
   protected
+    fMD5: TMD5Sys;
+    Function GetMD5: TMD5; virtual;
     procedure ProcessBlock(const Block); override;
     procedure ProcessFirst(const Block); override;
     procedure ProcessLast; override;
@@ -227,7 +226,7 @@ const
     TMD5Hash - class implementation
 ===============================================================================}
 {-------------------------------------------------------------------------------
-    TMD5Hash - private methods
+    TMD5Hash - protected methods
 -------------------------------------------------------------------------------}
 
 Function TMD5Hash.GetMD5: TMD5;
@@ -235,9 +234,7 @@ begin
 Result := MD5FromSys(fMD5);
 end;
 
-{-------------------------------------------------------------------------------
-    TMD5Hash - protected methods
--------------------------------------------------------------------------------}
+//------------------------------------------------------------------------------
 
 {$IFDEF OverflowChecks}{$Q-}{$ENDIF}
 procedure TMD5Hash.ProcessBlock(const Block);
