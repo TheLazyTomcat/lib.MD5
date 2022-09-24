@@ -11,7 +11,7 @@
 
   Version 1.6.1 (2020-07-13)
 
-  Last change 2022-09-13
+  Last change 2022-09-24
 
   ©2015-2022 František Milt
 
@@ -44,7 +44,7 @@
 unit MD5;
 
 {$IFDEF FPC}
-  {$MODE Delphi}
+  {$MODE ObjFPC}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
 {$ENDIF}
@@ -487,7 +487,7 @@ procedure TMD5Hash.FromString(const Str: String);
 var
   TempStr:  String;
   i:        Integer;
-  MD5:      TMD5;
+  TempMD5:  TMD5;
 begin
 If Length(Str) < Integer(HashSize * 2) then
   TempStr := StringOfChar('0',Integer(HashSize * 2) - Length(Str)) + Str
@@ -495,9 +495,9 @@ else If Length(Str) > Integer(HashSize * 2) then
   TempStr := Copy(Str,Length(Str) - Pred(Integer(HashSize * 2)),Integer(HashSize * 2))
 else
   TempStr := Str;
-For i := Low(MD5) to High(MD5) do
-  MD5[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
-fMD5 := MD5ToSys(MD5);
+For i := Low(TempMD5) to High(TempMD5) do
+  TempMD5[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
+fMD5 := MD5ToSys(TempMD5);
 end;
 
 //------------------------------------------------------------------------------
